@@ -9,7 +9,7 @@ import {
   Settings, ShieldCheck, Bell, User, Search, ArrowRight, 
   CheckCircle2, AlertTriangle, Clock, Filter, ChevronRight,
   Zap, Target, Users, Wallet, Activity, Shield, Send, Bot, User as UserIcon,
-  Plus, MoreVertical, RefreshCw, Download, ExternalLink, X, ShoppingCart, MapPin, Star, Volume2
+  Plus, MoreVertical, RefreshCw, Download, ExternalLink, X, ShoppingCart, MapPin, Star, Volume2, MousePointer2
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -18,7 +18,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, type FunctionDeclaration, type GenerateContentResponse } from "@google/genai";
 import Markdown from 'react-markdown';
 
 // --- Utilities ---
@@ -136,6 +136,70 @@ const MetricCard = ({ title, value, change, icon: Icon, color }: any) => (
 
 // --- Panels ---
 
+const AIInsights = ({ inventory, leads }: any) => {
+  const [insight, setInsight] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const generateInsight = async () => {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) return;
+        
+        const ai = new GoogleGenAI({ apiKey });
+        const lowStock = inventory.filter((i: any) => i.stock < i.threshold);
+        const highValueLeads = leads.filter((l: any) => l.val > 100000);
+        
+        const prompt = `As SmartOps AI, provide 3 extremely concise, high-impact business insights for an Indian SME owner based on this data:
+        - Low Stock Items: ${lowStock.length} (${lowStock.map((i: any) => i.name).join(', ')})
+        - High Value Leads: ${highValueLeads.length}
+        - Total Leads: ${leads.length}
+        Format as a simple markdown list. Focus on immediate actions.`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            systemInstruction: "You are a concise business consultant for Indian SMEs. Use INR and Indian context."
+          }
+        });
+        setInsight(response.text || "Focus on restocking high-demand items and following up with top leads.");
+      } catch (e) {
+        setInsight("Monitor inventory levels closely and prioritize lead conversion.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    generateInsight();
+  }, [inventory, leads]);
+
+  return (
+    <GlassCard className="lg:col-span-2 border-neon-blue/20">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-8 h-8 rounded-lg bg-neon-blue/20 flex items-center justify-center">
+          <Bot className="w-5 h-5 text-neon-blue" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white uppercase tracking-widest">AI Operational Insights</h3>
+          <p className="text-[10px] text-zinc-500 font-bold uppercase">Real-time Strategic Analysis</p>
+        </div>
+      </div>
+      {loading ? (
+        <div className="space-y-3">
+          <div className="h-4 bg-white/5 rounded animate-pulse w-3/4" />
+          <div className="h-4 bg-white/5 rounded animate-pulse w-1/2" />
+          <div className="h-4 bg-white/5 rounded animate-pulse w-2/3" />
+        </div>
+      ) : (
+        <div className="markdown-body text-xs text-zinc-300 leading-relaxed">
+          <Markdown>{insight}</Markdown>
+        </div>
+      )}
+    </GlassCard>
+  );
+};
+
 const Overview = ({ inventory, leads }: any) => {
   const lowStockCount = inventory.filter((i: any) => i.stock < i.threshold).length;
   const totalLeadValue = leads.reduce((acc: number, lead: any) => acc + lead.val, 0);
@@ -150,7 +214,33 @@ const Overview = ({ inventory, leads }: any) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <GlassCard className="lg:col-span-2">
+        <AIInsights inventory={inventory} leads={leads} />
+        <GlassCard>
+          <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest flex items-center gap-2">
+            <Star className="w-4 h-4 text-neon-purple" />
+            Top Selling Products
+          </h3>
+          <div className="space-y-6">
+            {inventory.slice(0, 4).map((prod: any, i: number) => (
+              <div key={prod.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-8 rounded-full" style={{ backgroundColor: i % 2 === 0 ? "#00f2ff" : "#bc13fe" }} />
+                  <div>
+                    <p className="text-sm font-bold text-white">{prod.name}</p>
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">{prod.stock} Units In Stock</p>
+                  </div>
+                </div>
+                <span className={cn("text-xs font-black", prod.stock > prod.threshold ? "text-neon-green" : "text-rose-500")}>
+                  {prod.stock > prod.threshold ? "+Stable" : "-Low"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <GlassCard className="lg:col-span-3">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-neon-blue" />
@@ -193,29 +283,6 @@ const Overview = ({ inventory, leads }: any) => {
                 ))}
               </tbody>
             </table>
-          </div>
-        </GlassCard>
-
-        <GlassCard>
-          <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest flex items-center gap-2">
-            <Star className="w-4 h-4 text-neon-purple" />
-            Top Selling Products
-          </h3>
-          <div className="space-y-6">
-            {inventory.slice(0, 4).map((prod: any, i: number) => (
-              <div key={prod.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-8 rounded-full" style={{ backgroundColor: i % 2 === 0 ? "#00f2ff" : "#bc13fe" }} />
-                  <div>
-                    <p className="text-sm font-bold text-white">{prod.name}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase">{prod.stock} Units In Stock</p>
-                  </div>
-                </div>
-                <span className={cn("text-xs font-black", prod.stock > prod.threshold ? "text-neon-green" : "text-rose-500")}>
-                  {prod.stock > prod.threshold ? "+Stable" : "-Low"}
-                </span>
-              </div>
-            ))}
           </div>
         </GlassCard>
       </div>
@@ -261,7 +328,7 @@ const Overview = ({ inventory, leads }: any) => {
               { stage: "New Leads", count: leads.filter((l: any) => l.status === 'Initial Contact').length, color: "#00f2ff" },
               { stage: "Proposal", count: leads.filter((l: any) => l.status === 'Proposal').length, color: "#bc13fe" },
               { stage: "Negotiation", count: leads.filter((l: any) => l.status === 'Negotiation').length, color: "#39ff14" },
-              { stage: "Closed", count: 95, color: "#ff00e0" },
+              { stage: "Closed", count: leads.filter((l: any) => l.status === 'Closed').length, color: "#ff00e0" },
             ].map((stage) => (
               <div key={stage.stage} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
                 <div className="flex items-center gap-3">
@@ -311,13 +378,26 @@ const Overview = ({ inventory, leads }: any) => {
   );
 };
 
-const AIChatbot = ({ inventory, sales, onAction }: any) => {
+const AIChatbot = ({ inventory, sales, setInventory, setLeads }: any) => {
   const [messages, setMessages] = useState<any[]>([
     { role: 'assistant', content: 'Hello! I am your SmartOps AI assistant. How can I help you optimize your business today?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Refs to keep track of latest state for AI tools
+  const inventoryRef = useRef(inventory);
+  const salesRef = useRef(sales);
+
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory]);
+
+  useEffect(() => {
+    salesRef.current = sales;
+  }, [sales]);
 
   const quickActions = [
     "Which products are low on stock?",
@@ -336,55 +416,236 @@ const AIChatbot = ({ inventory, sales, onAction }: any) => {
     const messageText = text || input;
     if (!messageText.trim() || isLoading) return;
 
-    const userMsg = { role: 'user', content: messageText };
+    const userMsg = { role: 'user', content: messageText, intent: null, sentiment: null };
     setMessages(prev => [...prev, userMsg]);
     if (!text) setInput('');
     setIsLoading(true);
+    setStatusMessage("Analyzing intent & sentiment...");
 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) throw new Error("API Key missing");
       
       const ai = new GoogleGenAI({ apiKey });
-      
-      // Live dynamic context from the app state
-      const lowStockItems = inventory.filter((i: any) => i.stock < i.threshold);
-      const highValueLeads = sales.filter((l: any) => l.val > 100000);
-      
-      const businessContext = `
-        Current LIVE Business State:
-        - Total Inventory Items: ${inventory.length}
-        - Low Stock Items: ${lowStockItems.length} (${lowStockItems.map((i: any) => i.name).join(', ')})
-        - Total Leads: ${sales.length}
-        - High Value Leads (>1L): ${highValueLeads.length}
-        - Top Lead: ${sales.sort((a: any, b: any) => b.val - a.val)[0]?.name}
-      `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [...messages, userMsg].map(m => ({
+      // Pre-process for intent and sentiment
+      try {
+        const analysisResponse = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Analyze the following user query for business intent and sentiment. 
+          Query: "${messageText}"
+          Respond ONLY with a JSON object in this format: 
+          { "intent": "string", "sentiment": "positive" | "negative" | "neutral" }`,
+          config: { responseMimeType: "application/json" }
+        });
+        
+        const analysis = JSON.parse(analysisResponse.text || "{}");
+        setMessages(prev => {
+          const next = [...prev];
+          let lastUserMsg = null;
+          for (let i = next.length - 1; i >= 0; i--) {
+            if (next[i].role === 'user' && next[i].content === messageText) {
+              lastUserMsg = next[i];
+              break;
+            }
+          }
+          if (lastUserMsg) {
+            lastUserMsg.intent = analysis.intent;
+            lastUserMsg.sentiment = analysis.sentiment;
+          }
+          return next;
+        });
+      } catch (e) {
+        console.error("Analysis Error:", e);
+      }
+
+      const tools: FunctionDeclaration[] = [
+        {
+          name: "get_inventory_status",
+          description: "Get the current inventory status including stock levels and thresholds.",
+          parameters: { type: Type.OBJECT, properties: {} }
+        },
+        {
+          name: "restock_item",
+          description: "Restock a specific item in the inventory.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              itemId: { type: Type.NUMBER, description: "The ID of the item to restock." },
+              quantity: { type: Type.NUMBER, description: "The quantity to add to the stock." },
+            },
+            required: ["itemId", "quantity"],
+          },
+        },
+        {
+          name: "get_sales_leads",
+          description: "Get the current sales leads and their potential values.",
+          parameters: { type: Type.OBJECT, properties: {} }
+        },
+        {
+          name: "add_sales_lead",
+          description: "Add a new sales lead to the CRM.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING, description: "The name of the lead company." },
+              value: { type: Type.NUMBER, description: "The potential value in INR." },
+              contact: { type: Type.STRING, description: "Contact person name." },
+              email: { type: Type.STRING, description: "Contact email address." },
+            },
+            required: ["name", "value", "contact", "email"],
+          },
+        },
+        {
+          name: "update_lead_status",
+          description: "Update the status of an existing sales lead.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              leadId: { type: Type.NUMBER, description: "The ID of the lead to update." },
+              status: { type: Type.STRING, description: "The new status (e.g., 'Negotiation', 'Closed', 'Proposal')." },
+            },
+            required: ["leadId", "status"],
+          },
+        },
+        {
+          name: "get_sales_analytics",
+          description: "Get historical sales data for trend analysis.",
+          parameters: { type: Type.OBJECT, properties: {} }
+        },
+        {
+          name: "predict_lead_conversion",
+          description: "Predict the conversion probability of a sales lead based on its current data.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              leadId: { type: Type.NUMBER, description: "The ID of the lead to analyze." },
+            },
+            required: ["leadId"],
+          },
+        }
+      ];
+
+      const systemInstruction = `You are SmartOps AI, a specialized business assistant for Indian SME owners. 
+      You help with inventory management, sales strategy, and operational efficiency. 
+      Use Indian business context and currency (INR) where appropriate. 
+      Be concise, professional, and data-driven.
+      
+      You have access to tools to manage inventory and leads. 
+      Always use these tools to get the latest data or perform actions.
+      When you perform an action (like restocking or adding a lead), confirm it to the user.
+      You can also predict lead conversion probabilities using the 'predict_lead_conversion' tool.`;
+
+      const contents: any[] = [
+        ...messages.map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }]
         })),
+        { role: 'user', parts: [{ text: messageText }] }
+      ];
+
+      let response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents,
         config: {
-          systemInstruction: `You are SmartOps AI, a specialized business assistant for Indian SME owners. 
-          You help with inventory management, sales strategy, and operational efficiency. 
-          Use Indian business context and currency (INR) where appropriate. 
-          Be concise, professional, and data-driven.
-          
-          ${businessContext}
-          
-          When asked about business performance, refer to the LIVE data provided above. 
-          If asked to "restock" or "add a lead", tell the user you can help with that and suggest they use the respective panels, or if you had tools you would use them.`
+          systemInstruction,
+          tools: [{ functionDeclarations: tools }]
         }
       });
 
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text || "I'm sorry, I couldn't process that." }]);
+      // Handle function calls
+      let iterations = 0;
+      while (response.functionCalls && iterations < 5) {
+        iterations++;
+        const functionResponses: any[] = [];
+
+        // Add the model's tool call to the history
+        contents.push(response.candidates[0].content);
+
+        for (const call of response.functionCalls) {
+          setStatusMessage(`Executing: ${call.name}...`);
+          let result: any;
+          if (call.name === "get_inventory_status") {
+            result = inventoryRef.current;
+          } else if (call.name === "restock_item") {
+            const { itemId, quantity } = call.args as any;
+            setInventory((prev: any) => {
+              const next = prev.map((item: any) => 
+                item.id === itemId ? { ...item, stock: item.stock + quantity, status: (item.stock + quantity) > item.threshold ? "Healthy" : "Low Stock" } : item
+              );
+              inventoryRef.current = next;
+              return next;
+            });
+            result = { success: true, message: `Restocked item ${itemId} with ${quantity} units.` };
+          } else if (call.name === "get_sales_leads") {
+            result = salesRef.current;
+          } else if (call.name === "update_lead_status") {
+            const { leadId, status } = call.args as any;
+            setLeads((prev: any) => {
+              const next = prev.map((l: any) => l.id === leadId ? { ...l, status } : l);
+              salesRef.current = next;
+              return next;
+            });
+            result = { success: true, message: `Updated lead ${leadId} status to ${status}.` };
+          } else if (call.name === "get_sales_analytics") {
+            result = SALES_DATA;
+          } else if (call.name === "predict_lead_conversion") {
+            const { leadId } = call.args as any;
+            const lead = salesRef.current.find((l: any) => l.id === leadId);
+            if (lead) {
+              // Simulate AI prediction logic
+              const baseProb = lead.score;
+              const randomFactor = Math.floor(Math.random() * 10) - 5;
+              const prob = Math.min(100, Math.max(0, baseProb + randomFactor));
+              result = { 
+                leadId, 
+                probability: prob, 
+                analysis: `Based on current status (${lead.status}) and historical data, this lead has a ${prob}% chance of conversion. Key factors: ${lead.val > 200000 ? 'High deal value' : 'Consistent engagement'}.` 
+              };
+            } else {
+              result = { error: "Lead not found" };
+            }
+          } else if (call.name === "add_sales_lead") {
+            const { name, value, contact, email } = call.args as any;
+            const newLead = { id: Date.now(), name, val: value, status: "Initial Contact", score: 50, contact, email };
+            setLeads((prev: any) => {
+              const next = [...prev, newLead];
+              salesRef.current = next;
+              return next;
+            });
+            result = { success: true, message: `Added new lead: ${name}`, leadId: newLead.id };
+          }
+
+          functionResponses.push({
+            name: call.name,
+            response: { result },
+            id: call.id
+          });
+        }
+
+        setStatusMessage("Finalizing response...");
+        contents.push({
+          role: 'tool',
+          parts: functionResponses.map(fr => ({ functionResponse: fr }))
+        });
+
+        response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents,
+          config: {
+            systemInstruction,
+            tools: [{ functionDeclarations: tools }]
+          }
+        });
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: response.text || "I've processed your request." }]);
     } catch (error) {
       console.error("AI Error:", error);
       setMessages(prev => [...prev, { role: 'assistant', content: "Error connecting to AI intelligence. Please check your network or API configuration." }]);
     } finally {
       setIsLoading(false);
+      setStatusMessage(null);
     }
   };
 
@@ -393,15 +654,15 @@ const AIChatbot = ({ inventory, sales, onAction }: any) => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-[calc(100vh-280px)] flex flex-col gap-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-[calc(100vh-200px)] flex flex-col gap-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard title="AI Accuracy" value="98.2%" change="+0.5%" icon={CheckCircle2} color="#39ff14" />
         <MetricCard title="Response Time" value="1.2s" change="-0.2s" icon={Zap} color="#00f2ff" />
         <MetricCard title="Leads Captured" value="142" change="+12" icon={Target} color="#bc13fe" />
       </div>
 
-      <GlassCard className="flex-1 flex flex-col p-0 overflow-hidden">
-        <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/5">
+      <GlassCard className="flex-1 flex flex-col p-0 overflow-hidden border-neon-blue/20 shadow-[0_0_30px_rgba(0,242,255,0.05)]">
+        <div className="p-5 border-b border-white/5 flex items-center justify-between bg-white/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-neon-blue/20 flex items-center justify-center">
               <Bot className="w-5 h-5 text-neon-blue" />
@@ -449,26 +710,44 @@ const AIChatbot = ({ inventory, sales, onAction }: any) => {
                 {msg.role === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
               </div>
               <div className={cn(
-                "max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed relative group/msg",
-                msg.role === 'user' 
-                  ? "bg-neon-purple/10 text-zinc-200 rounded-tr-none border border-neon-purple/20" 
-                  : "bg-white/5 text-zinc-300 rounded-tl-none border border-white/10"
+                "max-w-[80%] flex flex-col gap-1",
+                msg.role === 'user' ? "items-end" : "items-start"
               )}>
-                <div className="markdown-body">
-                  <Markdown>{msg.content}</Markdown>
+                <div className={cn(
+                  "p-4 rounded-2xl text-sm leading-relaxed relative group/msg",
+                  msg.role === 'user' 
+                    ? "bg-neon-purple/10 text-zinc-200 rounded-tr-none border border-neon-purple/20" 
+                    : "bg-white/5 text-zinc-300 rounded-tl-none border border-white/10"
+                )}>
+                  <div className="markdown-body">
+                    <Markdown>{msg.content}</Markdown>
+                  </div>
+                  {msg.role === 'assistant' && (
+                    <button 
+                      onClick={() => {
+                        const utterance = new SpeechSynthesisUtterance(msg.content);
+                        utterance.rate = 1.1;
+                        window.speechSynthesis.speak(utterance);
+                      }}
+                      className="absolute -right-10 top-0 p-2 opacity-0 group-hover/msg:opacity-100 transition-opacity text-zinc-500 hover:text-neon-blue"
+                      title="Read Aloud"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {msg.role === 'assistant' && (
-                  <button 
-                    onClick={() => {
-                      const utterance = new SpeechSynthesisUtterance(msg.content);
-                      utterance.rate = 1.1;
-                      window.speechSynthesis.speak(utterance);
-                    }}
-                    className="absolute -right-10 top-0 p-2 opacity-0 group-hover/msg:opacity-100 transition-opacity text-zinc-500 hover:text-neon-blue"
-                    title="Read Aloud"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
+                {msg.role === 'user' && msg.intent && (
+                  <div className="flex items-center gap-2 px-1">
+                    <div className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      msg.sentiment === 'positive' ? "bg-neon-green shadow-[0_0_8px_#39ff14]" :
+                      msg.sentiment === 'negative' ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]" :
+                      "bg-zinc-500 shadow-[0_0_8px_#71717a]"
+                    )} />
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                      Intent: {msg.intent}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -478,12 +757,19 @@ const AIChatbot = ({ inventory, sales, onAction }: any) => {
               <div className="w-8 h-8 rounded-lg bg-neon-blue/20 flex items-center justify-center animate-pulse">
                 <Bot className="w-4 h-4 text-neon-blue" />
               </div>
-              <div className="bg-white/5 p-4 rounded-2xl rounded-tl-none border border-white/10">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce" />
-                  <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce [animation-delay:0.4s]" />
+              <div className="flex flex-col gap-2">
+                <div className="bg-white/5 p-4 rounded-2xl rounded-tl-none border border-white/10">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce" />
+                    <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <span className="w-1.5 h-1.5 bg-neon-blue rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </div>
                 </div>
+                {statusMessage && (
+                  <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest ml-2 animate-pulse">
+                    {statusMessage}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -513,7 +799,7 @@ const AIChatbot = ({ inventory, sales, onAction }: any) => {
   );
 };
 
-const SalesCRM = ({ leads, onSelectLead }: any) => {
+const SalesCRM = ({ leads }: any) => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -528,8 +814,7 @@ const SalesCRM = ({ leads, onSelectLead }: any) => {
             {leads.map((lead: any) => (
               <div 
                 key={lead.id} 
-                onClick={() => onSelectLead(lead)}
-                className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-neon-blue/30 hover:bg-white/10 transition-all cursor-pointer group"
+                className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-neon-blue/30 hover:bg-white/10 transition-all group"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-neon-purple/20 flex items-center justify-center text-neon-purple font-black">
@@ -555,6 +840,51 @@ const SalesCRM = ({ leads, onSelectLead }: any) => {
         </GlassCard>
 
         <div className="space-y-6">
+          <GlassCard className="bg-neon-blue/5 border-neon-blue/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-neon-blue/20 flex items-center justify-center text-neon-blue">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white uppercase tracking-widest">Pipeline Strategy</h4>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">AI Recommendations</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-xs font-bold text-neon-blue mb-1">Focus on Negotiation</p>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  3 high-value leads are stuck in 'Negotiation'. Offering a 5% bulk discount could close them by EOW.
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-xs font-bold text-neon-purple mb-1">Lead Warming</p>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  Send the new 'ProCrunch' product catalog to leads in 'Initial Contact' to boost engagement scores.
+                </p>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Recent Activity</h3>
+            <div className="space-y-4">
+              {[
+                { type: 'call', user: 'Rahul S.', action: 'Called Reliance Retail', time: '10m ago' },
+                { type: 'email', user: 'Priya K.', action: 'Sent proposal to Tata Group', time: '45m ago' },
+                { type: 'meeting', user: 'Amit V.', action: 'Meeting with BigBasket', time: '2h ago' },
+              ].map((act, i) => (
+                <div key={i} className="flex gap-3 items-start">
+                  <div className="w-1.5 h-1.5 rounded-full bg-neon-blue mt-1.5" />
+                  <div>
+                    <p className="text-xs font-bold text-white">{act.action}</p>
+                    <p className="text-[10px] text-zinc-500">{act.user} • {act.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+
           <GlassCard>
             <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Conversion Funnel</h3>
             <div className="space-y-6">
@@ -581,17 +911,29 @@ const SalesCRM = ({ leads, onSelectLead }: any) => {
               ))}
             </div>
           </GlassCard>
-          
-          <GlassCard className="bg-neon-blue/5 border-neon-blue/20">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-neon-blue/20">
-                <TrendingUp className="w-4 h-4 text-neon-blue" />
-              </div>
-              <p className="text-xs font-bold text-white uppercase tracking-widest">AI Prediction</p>
+
+          <GlassCard>
+            <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Sales Leaderboard</h3>
+            <div className="space-y-4">
+              {[
+                { name: "Rahul Sharma", sales: 1250000, leads: 45, color: "#00f2ff" },
+                { name: "Priya Kapoor", sales: 980000, leads: 38, color: "#bc13fe" },
+                { name: "Amit Verma", sales: 750000, leads: 32, color: "#39ff14" }
+              ].map((rep, i) => (
+                <div key={rep.name} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black text-white">
+                      {i + 1}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">{rep.name}</p>
+                      <p className="text-[8px] text-zinc-500 uppercase font-bold">{rep.leads} Leads Closed</p>
+                    </div>
+                  </div>
+                  <p className="text-xs font-black text-neon-green">{formatINR(rep.sales)}</p>
+                </div>
+              ))}
             </div>
-            <p className="text-sm text-zinc-300 leading-relaxed">
-              Based on current trends, we expect a <span className="text-neon-green font-bold">15% increase</span> in bulk orders from North India next month.
-            </p>
           </GlassCard>
         </div>
       </div>
@@ -601,27 +943,47 @@ const SalesCRM = ({ leads, onSelectLead }: any) => {
 
 const InventoryOps = ({ items, setItems, suppliers, reorderLogs, setReorderLogs }: any) => {
   const [isRestocking, setIsRestocking] = useState<number | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState<number | null>(null);
   const [view, setView] = useState<'inventory' | 'suppliers'>('inventory');
   const [editingItem, setEditingItem] = useState<any>(null);
 
-  // Automated Reorder Trigger Logic
-  useEffect(() => {
-    items.forEach((item: any) => {
-      if (item.stock < item.threshold && !reorderLogs.some((log: any) => log.itemId === item.id && log.status === 'Pending')) {
-        const supplier = suppliers.find((s: any) => s.id === item.supplierId);
-        const newLog = {
-          id: Date.now() + item.id,
-          itemId: item.id,
-          itemName: item.name,
-          supplierName: supplier?.name,
-          timestamp: new Date().toLocaleTimeString(),
-          status: 'Pending',
-          quantity: item.threshold * 2
-        };
-        setReorderLogs((prev: any) => [newLog, ...prev]);
-      }
-    });
-  }, [items, suppliers, reorderLogs, setReorderLogs]);
+  const handleSmartReorder = async (item: any) => {
+    setIsAnalyzing(item.id);
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key missing");
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `As SmartOps AI, recommend a reorder quantity for ${item.name}. 
+      Current Stock: ${item.stock}, Threshold: ${item.threshold}. 
+      Return ONLY the recommended number.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      
+      const recommendedQty = parseInt(response.text?.replace(/\D/g, '') || "100");
+      
+      setItems((prev: any) => prev.map((i: any) => 
+        i.id === item.id ? { ...i, stock: i.stock + recommendedQty, status: "Healthy" } : i
+      ));
+      
+      setReorderLogs((prev: any) => [{
+        id: Date.now(),
+        itemId: item.id,
+        itemName: item.name,
+        supplierName: suppliers.find((s: any) => s.id === item.supplierId)?.name || "Unknown",
+        timestamp: new Date().toLocaleTimeString(),
+        status: 'Completed',
+        quantity: recommendedQty
+      }, ...prev]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsAnalyzing(null);
+    }
+  };
 
   const handleRestock = (id: number) => {
     setIsRestocking(id);
@@ -730,10 +1092,15 @@ const InventoryOps = ({ items, setItems, suppliers, reorderLogs, setReorderLogs 
                           <td className="py-4 px-2 text-right">
                             <div className="flex justify-end gap-2">
                               <button 
-                                onClick={() => setEditingItem(item)}
-                                className="p-2 bg-white/5 border border-white/10 rounded-lg text-zinc-500 hover:text-neon-blue transition-colors"
+                                onClick={() => handleSmartReorder(item)}
+                                disabled={isAnalyzing === item.id}
+                                className={cn(
+                                  "p-2 bg-white/5 border border-white/10 rounded-lg text-zinc-500 hover:text-neon-blue transition-colors",
+                                  isAnalyzing === item.id && "animate-pulse"
+                                )}
+                                title="AI Smart Reorder"
                               >
-                                <Settings className="w-3 h-3" />
+                                <Bot className="w-3 h-3" />
                               </button>
                               <button 
                                 onClick={() => handleRestock(item.id)}
@@ -902,21 +1269,36 @@ const Analytics = () => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <GlassCard>
-        <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Sales Trend (30D)</h3>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Sales Trend (30D)</h3>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-neon-blue rounded-full" />
+            <span className="text-[10px] font-bold text-zinc-500 uppercase">Actual Revenue</span>
+          </div>
+        </div>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={SALES_DATA}>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
               <XAxis dataKey="name" stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
               <YAxis stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #ffffff10' }} />
-              <Line type="monotone" dataKey="sales" stroke="#00f2ff" strokeWidth={3} dot={{ r: 4, fill: '#00f2ff' }} />
+              <Tooltip 
+                contentStyle={{ background: '#18181b', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                itemStyle={{ color: '#00f2ff', fontWeight: 'bold' }}
+              />
+              <Line type="monotone" dataKey="sales" stroke="#00f2ff" strokeWidth={3} dot={{ r: 4, fill: '#00f2ff' }} activeDot={{ r: 6, stroke: '#00f2ff', strokeWidth: 2, fill: '#000' }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </GlassCard>
       <GlassCard>
-        <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Demand Forecast</h3>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Demand Forecast</h3>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-neon-purple rounded-full" />
+            <span className="text-[10px] font-bold text-zinc-500 uppercase">AI Projected</span>
+          </div>
+        </div>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={FORECAST_DATA}>
@@ -928,13 +1310,138 @@ const Analytics = () => (
               </defs>
               <XAxis dataKey="name" stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
               <YAxis stroke="#71717a" fontSize={10} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #ffffff10' }} />
-              <Area type="monotone" dataKey="demand" stroke="#bc13fe" fillOpacity={1} fill="url(#colorDemand)" />
+              <Tooltip 
+                contentStyle={{ background: '#18181b', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                itemStyle={{ color: '#bc13fe', fontWeight: 'bold' }}
+              />
+              <Area type="monotone" dataKey="demand" stroke="#bc13fe" fillOpacity={1} fill="url(#colorDemand)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </GlassCard>
     </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <GlassCard className="lg:col-span-2">
+        <h3 className="text-sm font-bold text-zinc-400 mb-6 uppercase tracking-widest">Revenue vs Target</h3>
+        <div className="space-y-6">
+          {[
+            { region: "Mumbai", revenue: 450000, target: 500000, color: "#00f2ff" },
+            { region: "Delhi", revenue: 380000, target: 400000, color: "#bc13fe" },
+            { region: "Bangalore", revenue: 290000, target: 350000, color: "#39ff14" },
+          ].map((item) => (
+            <div key={item.region} className="space-y-2">
+              <div className="flex justify-between text-[10px] font-bold uppercase">
+                <span className="text-zinc-400">{item.region}</span>
+                <span className="text-white">{formatINR(item.revenue)} / {formatINR(item.target)}</span>
+              </div>
+              <div className="h-3 bg-white/5 rounded-full overflow-hidden relative">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(item.revenue / item.target) * 100}%` }}
+                  className="h-full"
+                  style={{ backgroundColor: item.color }}
+                />
+                <div className="absolute inset-0 flex items-center justify-end px-2">
+                  <span className="text-[8px] font-black text-black">{Math.round((item.revenue / item.target) * 100)}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+
+      <div className="space-y-6">
+        <GlassCard className="bg-neon-purple/5 border-neon-purple/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-neon-purple/20 flex items-center justify-center text-neon-purple">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">AI Anomaly Detection</h4>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase">System Health Check</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-neon-green rounded-full" />
+                <p className="text-xs font-bold text-white">Sales Velocity</p>
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                Velocity is 12% above average for this quarter. No anomalies detected.
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-rose-500 rounded-full" />
+                <p className="text-xs font-bold text-white">Churn Risk</p>
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                Detected unusual inactivity from 3 high-value accounts in Delhi NCR.
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="bg-neon-blue/5 border-neon-blue/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-neon-blue/20 flex items-center justify-center text-neon-blue">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Market Sentiment</h4>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase">Real-time Analysis</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex justify-between text-[10px] font-bold uppercase mb-2">
+                <span className="text-zinc-500">Bullish</span>
+                <span className="text-neon-green">78%</span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-neon-green" style={{ width: '78%' }} />
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-black text-white">Positive</p>
+              <p className="text-[8px] text-zinc-500 uppercase font-bold">Trend</p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="bg-neon-green/5 border-neon-green/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-neon-green/20 flex items-center justify-center text-neon-green">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white uppercase tracking-widest">Top Products</h4>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase">By Revenue</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[
+              { name: "ProCrunch Masala", rev: 125000, trend: "+12%" },
+              { name: "NutriMix Gold", rev: 98000, trend: "+8%" },
+              { name: "EnergyBar X", rev: 75000, trend: "-3%" }
+            ].map((p) => (
+              <div key={p.name} className="flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-white">{p.name}</p>
+                  <p className="text-[8px] text-zinc-500 uppercase font-bold">{formatINR(p.rev)}</p>
+                </div>
+                <span className={`text-[10px] font-black ${p.trend.startsWith('+') ? 'text-neon-green' : 'text-rose-500'}`}>
+                  {p.trend}
+                </span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+    </div>
+
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {[
         { label: "Top Region", val: "Mumbai Metro" },
@@ -958,12 +1465,24 @@ export default function App() {
   // Lifted State
   const [inventory, setInventory] = useState(INVENTORY);
   const [suppliers] = useState(SUPPLIERS);
-  const [reorderLogs, setReorderLogs] = useState<any[]>([]);
+  const [reorderLogs, setReorderLogs] = useState<any[]>([
+    { id: "LOG-001", itemName: "ProCrunch Masala", quantity: 500, supplierName: "SpiceRoute India", timestamp: "2026-03-18 10:30", status: "Completed" },
+    { id: "LOG-002", itemName: "NutriMix Gold", quantity: 200, supplierName: "Organic Farms Co.", timestamp: "2026-03-18 14:15", status: "Completed" },
+    { id: "LOG-003", itemName: "EnergyBar X", quantity: 1000, supplierName: "Global Foods Ltd.", timestamp: "2026-03-19 09:00", status: "Completed" },
+    { id: "LOG-004", itemName: "OatMeal Plus", quantity: 300, supplierName: "SpiceRoute India", timestamp: "2026-03-19 11:45", status: "Completed" },
+    { id: "LOG-005", itemName: "ProCrunch Masala", quantity: 450, supplierName: "SpiceRoute India", timestamp: "2026-03-19 13:20", status: "Completed" }
+  ]);
   const [leads, setLeads] = useState([
     { id: 1, name: "Reliance Retail", val: 450000, status: "Negotiation", score: 85, contact: "Amit Shah", email: "amit@reliance.com" },
     { id: 2, name: "BigBasket Hub", val: 125000, status: "Proposal", score: 62, contact: "Priya Rai", email: "priya@bigbasket.in" },
     { id: 3, name: "Zomato Blink", val: 85000, status: "Initial Contact", score: 45, contact: "Rahul K.", email: "rahul@blinkit.com" },
-    { id: 4, name: "Spencers Mart", val: 210000, status: "Negotiation", score: 78, contact: "Sanjay D.", email: "sanjay@spencers.in" }
+    { id: 4, name: "Spencers Mart", val: 210000, status: "Negotiation", score: 78, contact: "Sanjay D.", email: "sanjay@spencers.in" },
+    { id: 5, name: "Nature's Basket", val: 320000, status: "Proposal", score: 71, contact: "Anjali M.", email: "anjali@naturesbasket.com" },
+    { id: 6, name: "Star Bazaar", val: 560000, status: "Negotiation", score: 92, contact: "Vikram S.", email: "vikram@starbazaar.com" },
+    { id: 7, name: "D-Mart Metro", val: 1200000, status: "Closed", score: 100, contact: "Ramesh G.", email: "ramesh@dmart.in" },
+    { id: 8, name: "Apollo Pharmacy", val: 150000, status: "Initial Contact", score: 38, contact: "Dr. Gupta", email: "gupta@apollo.com" },
+    { id: 9, name: "Wellness Forever", val: 280000, status: "Proposal", score: 65, contact: "Karan P.", email: "karan@wellness.com" },
+    { id: 10, name: "More Retail", val: 410000, status: "Closed", score: 100, contact: "Sita R.", email: "sita@more.in" }
   ]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1076,7 +1595,10 @@ export default function App() {
         </header>
 
         <div className="p-10 flex-1">
-          <div className="max-w-6xl mx-auto">
+          <div className={cn(
+            "mx-auto transition-all duration-500",
+            active === 'AI Assist' ? "max-w-7xl" : "max-w-6xl"
+          )}>
             <div className="mb-10 flex justify-between items-end">
               <div>
                 <h2 className="text-4xl font-black text-white tracking-tighter mb-2">{active}</h2>
@@ -1095,8 +1617,8 @@ export default function App() {
             <AnimatePresence mode="wait">
               <motion.div key={active} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}>
                 {active === 'Overview' && <Overview inventory={inventory} leads={leads} />}
-                {active === 'AI Assist' && <AIChatbot inventory={inventory} sales={leads} />}
-                {active === 'AI Sales' && <SalesCRM leads={leads} onSelectLead={setSelectedLead} />}
+                {active === 'AI Assist' && <AIChatbot inventory={inventory} sales={leads} setInventory={setInventory} setLeads={setLeads} />}
+                {active === 'AI Sales' && <SalesCRM leads={leads} />}
                 {active === 'AI Ops' && (
                   <InventoryOps 
                     items={inventory} 
